@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Text, FlatList, Pressable, Keyboard, StyleSheet } from 'react-native';
 import { fetchPokemonList, fetchPokemonIndex } from '../services/pokemonService';
 import { matchesSearch } from '../utils/search';
@@ -7,7 +7,10 @@ import SearchBar from '../components/SearchBar';
 import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
 import EmptyState from '../components/EmptyState';
-import { colors, spacing } from '../theme';
+import { colors, spacing, radius } from '../theme';
+
+// After this many pixels scrolled down, the "back to top" button appears (~5 rows)
+const SCROLL_TOP_THRESHOLD = 800;
 
 export default function ListScreen({ onSelectPokemon }) {
   // ---------- Paginated list ----------
@@ -25,6 +28,12 @@ export default function ListScreen({ onSelectPokemon }) {
   const [indexLoading, setIndexLoading] = useState(true);
   const [indexError, setIndexError] = useState(null);
   const [indexKey, setIndexKey] = useState(0); // "Reintentar" for the index
+
+  // ---------- Back to top ----------
+  // CONCEPT: useRef — a direct reference to the FlatList to call its methods (scrollToOffset).
+  // Changing a ref does NOT re-render the screen
+  const listRef = useRef(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   // CONCEPT: useEffect dependency array — a new page only when offset or reloadKey change
   useEffect(() => {
@@ -113,6 +122,17 @@ export default function ListScreen({ onSelectPokemon }) {
   // Results already appear while typing; the button only hides the keyboard
   const handleSearch = () => Keyboard.dismiss();
 
+  // Show the button only when crossing the threshold (not on every pixel),
+  // so the screen does not re-render all the time while scrolling
+  const handleScroll = (event) => {
+    const shouldShow = event.nativeEvent.contentOffset.y > SCROLL_TOP_THRESHOLD;
+    if (shouldShow !== showScrollTop) setShowScrollTop(shouldShow);
+  };
+
+  const handleScrollToTop = () => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  };
+
   // Shown at the end of the paginated list
   const renderFooter = () => {
     if (loadingMore) return <LoadingState message="Cargando más Pokémon..." />;
@@ -124,6 +144,7 @@ export default function ListScreen({ onSelectPokemon }) {
   const renderGrid = (data, isPaginated) => (
     // CONCEPT: FlatList renders only what is on screen (better than ScrollView + map)
     <FlatList
+      ref={listRef}
       data={data}
       keyExtractor={(item) => String(item.id)}
       numColumns={2}
@@ -139,6 +160,8 @@ export default function ListScreen({ onSelectPokemon }) {
       onEndReached={isPaginated ? handleLoadMore : undefined}
       onEndReachedThreshold={0.5}
       ListFooterComponent={isPaginated ? renderFooter : null}
+      onScroll={handleScroll}
+      scrollEventThrottle={100} // check the position every 100 ms, not on every frame
       keyboardShouldPersistTaps="handled" // taps on cards work even with the keyboard open
       keyboardDismissMode="on-drag" // CONCEPT: start scrolling = hide the keyboard
       contentContainerStyle={styles.list}
@@ -147,6 +170,7 @@ export default function ListScreen({ onSelectPokemon }) {
 
   // CONCEPT: interface states — loading, error, empty, success
   let content = null;
+  let hasGrid = false; // the button only makes sense when a list is on screen
   if (isSearchActive) {
     if (indexLoading) {
       content = <LoadingState message="Preparando búsqueda..." />;
@@ -158,6 +182,7 @@ export default function ListScreen({ onSelectPokemon }) {
       );
     } else {
       content = renderGrid(searchResults, false); // search results: no pagination
+      hasGrid = true;
     }
   } else if (loading) {
     content = <LoadingState message="Cargando Pokémon..." />;
@@ -166,6 +191,7 @@ export default function ListScreen({ onSelectPokemon }) {
     content = <ErrorState message={error} onRetry={handleRetry} />;
   } else {
     content = renderGrid(pokemons, true);
+    hasGrid = true;
   }
 
   return (
@@ -186,6 +212,17 @@ export default function ListScreen({ onSelectPokemon }) {
       )}
 
       {content}
+
+      {/* Floating button over the list, bottom right corner */}
+      {hasGrid && showScrollTop && (
+        <Pressable
+          style={({ pressed }) => [styles.scrollTopButton, pressed && styles.pressed]}
+          onPress={handleScrollToTop}
+          accessibilityLabel="Volver al inicio de la lista"
+        >
+          <Text style={styles.scrollTopText}>↑</Text>
+        </Pressable>
+      )}
     </Pressable>
   );
 }
@@ -216,5 +253,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: colors.textMuted,
     padding: spacing.lg,
+  },
+  scrollTopButton: {
+    position: 'absolute', // floats over the list instead of taking space
+    right: spacing.lg,
+    bottom: spacing.lg,
+    width: 52,
+    height: 52,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // shadow (iOS) and elevation (Android) so it stands out from the cards
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 5,
+  },
+  scrollTopText: {
+    color: colors.white,
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  pressed: {
+    opacity: 0.7,
   },
 });
