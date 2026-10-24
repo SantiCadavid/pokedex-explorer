@@ -1,25 +1,55 @@
 import { useState } from 'react';
-import { View, Pressable, Text } from 'react-native';
-import LoadingState from './src/components/LoadingState';
-import ErrorState from './src/components/ErrorState';
-import EmptyState from './src/components/EmptyState';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import ListScreen from './src/screens/ListScreen';
+import { colors, spacing } from './src/theme';
 
 export default function App() {
-  const [state, setState] = useState('loading');
+  // CONCEPT: navigation with state — null shows the list, an id shows the detail
+  const [selectedPokemon, setSelectedPokemon] = useState(null);
+  const isDetailOpen = selectedPokemon !== null;
 
   return (
-    <View style={{ flex: 1, paddingTop: 60 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
-        {['loading', 'error', 'empty'].map((name) => (
-          <Pressable key={name} onPress={() => setState(name)}>
-            <Text style={{ padding: 12, fontWeight: 'bold' }}>{name}</Text>
-          </Pressable>
-        ))}
-      </View>
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="dark" />
 
-      {state === 'loading' && <LoadingState message="Cargando Pokémon..." />}
-      {state === 'error' && <ErrorState onRetry={() => setState('loading')} />}
-      {state === 'empty' && <EmptyState message='No existe ningún Pokémon llamado "xyz".' />}
-    </View>
+        {/* The list stays mounted (only hidden) so it keeps its data and scroll */}
+        <View style={[styles.container, isDetailOpen && styles.hidden]}>
+          <ListScreen onSelectPokemon={setSelectedPokemon} />
+        </View>
+
+        {/* Temporary view until DetailScreen is built in step 7 */}
+        {isDetailOpen && (
+          <View style={styles.placeholder}>
+            <Text>Pokémon seleccionado: {selectedPokemon}</Text>
+            <Pressable onPress={() => setSelectedPokemon(null)}>
+              <Text style={styles.back}>Volver a la lista</Text>
+            </Pressable>
+          </View>
+        )}
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  hidden: {
+    display: 'none',
+  },
+  placeholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  back: {
+    marginTop: spacing.md,
+    color: colors.primary,
+    fontWeight: 'bold',
+  },
+});
