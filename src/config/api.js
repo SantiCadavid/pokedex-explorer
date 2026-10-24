@@ -7,3 +7,6 @@ export const PAGE_SIZE = 20;
 // Image for the list, so we don't need to request the full detail of each Pokémon
 export const ARTWORK_URL =
   'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork';
+
+// Bigger than the API "count" (~1300), so one request brings every name for the live search
+export const INDEX_LIMIT = 2000;

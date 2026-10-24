@@ -1,22 +1,32 @@
 import { useState, useEffect } from 'react';
-import { View, Text, FlatList, StyleSheet } from 'react-native';
-import { fetchPokemonList } from '../services/pokemonService';
+import { Text, FlatList, Pressable, Keyboard, StyleSheet } from 'react-native';
+import { fetchPokemonList, fetchPokemonIndex } from '../services/pokemonService';
+import { matchesSearch } from '../utils/search';
 import PokemonCard from '../components/PokemonCard';
+import SearchBar from '../components/SearchBar';
 import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
+import EmptyState from '../components/EmptyState';
 import { colors, spacing } from '../theme';
 
 export default function ListScreen({ onSelectPokemon }) {
+  // ---------- Paginated list ----------
   const [pokemons, setPokemons] = useState([]);
   const [offset, setOffset] = useState(0); // where the next page starts
   const [hasMore, setHasMore] = useState(true); // false when "next" is null
   const [loading, setLoading] = useState(true); // first page
   const [loadingMore, setLoadingMore] = useState(false); // next pages
   const [error, setError] = useState(null);
-  // Changing this number runs the useEffect again (used by "Reintentar")
-  const [reloadKey, setReloadKey] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0); // "Reintentar" for the list
 
-  // CONCEPT: useEffect dependency array — a new request only when offset or reloadKey change
+  // ---------- Live search ----------
+  const [searchText, setSearchText] = useState(''); // what the user types
+  const [allPokemons, setAllPokemons] = useState([]); // index: every name + id
+  const [indexLoading, setIndexLoading] = useState(true);
+  const [indexError, setIndexError] = useState(null);
+  const [indexKey, setIndexKey] = useState(0); // "Reintentar" for the index
+
+  // CONCEPT: useEffect dependency array — a new page only when offset or reloadKey change
   useEffect(() => {
     const controller = new AbortController();
     const isFirstPage = offset === 0;
@@ -51,17 +61,59 @@ export default function ListScreen({ onSelectPokemon }) {
     return () => controller.abort();
   }, [offset, reloadKey]);
 
+  // CONCEPT: useEffect dependency array — the index is requested once (and again only on retry)
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const loadIndex = async () => {
+      setIndexLoading(true);
+      setIndexError(null);
+      try {
+        const result = await fetchPokemonIndex(controller.signal);
+        setAllPokemons(result);
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          setIndexError('No se pudo preparar la búsqueda. Revisa tu internet.');
+        }
+      } finally {
+        if (!controller.signal.aborted) setIndexLoading(false);
+      }
+    };
+
+    loadIndex();
+    return () => controller.abort();
+  }, [indexKey]);
+
+  // Ignore uppercase and spaces at the start or end
+  const searchTerm = searchText.trim().toLowerCase();
+  const isSearchActive = searchTerm !== '';
+
+  // CONCEPT: derived data — results are calculated on every keystroke from searchText,
+  // filtering on the phone, so typing does NOT send requests to the API
+  const searchResults = isSearchActive
+    ? allPokemons.filter((pokemon) => matchesSearch(pokemon, searchTerm))
+    : [];
+
   // CONCEPT: infinite scroll — onEndReached can fire several times in a row,
-  // so we block it while loading, after an error, or when there are no more pages
+  // so we block it while loading, after an error, with no more pages, or during a search
   const handleLoadMore = () => {
-    if (loading || loadingMore || !hasMore || error) return;
+    if (isSearchActive || loading || loadingMore || !hasMore || error) return;
     // Using the list length (not offset + 20) means repeated calls ask for the same page
     setOffset(pokemons.length);
   };
 
   const handleRetry = () => setReloadKey((prev) => prev + 1);
+  const handleIndexRetry = () => setIndexKey((prev) => prev + 1);
 
-  // Shown at the end of the list
+  const handleClearSearch = () => {
+    setSearchText('');
+    Keyboard.dismiss();
+  };
+
+  // Results already appear while typing; the button only hides the keyboard
+  const handleSearch = () => Keyboard.dismiss();
+
+  // Shown at the end of the paginated list
   const renderFooter = () => {
     if (loadingMore) return <LoadingState message="Cargando más Pokémon..." />;
     if (error) return <ErrorState message={error} onRetry={handleRetry} />;
@@ -69,36 +121,72 @@ export default function ListScreen({ onSelectPokemon }) {
     return null;
   };
 
-  // CONCEPT: interface states — loading, error, success
-  let content;
-  if (loading) {
+  const renderGrid = (data, isPaginated) => (
+    // CONCEPT: FlatList renders only what is on screen (better than ScrollView + map)
+    <FlatList
+      data={data}
+      keyExtractor={(item) => String(item.id)}
+      numColumns={2}
+      renderItem={({ item }) => (
+        <PokemonCard
+          pokemon={item}
+          onPress={() => {
+            Keyboard.dismiss(); // do not carry the keyboard into the detail view
+            onSelectPokemon(item.id);
+          }}
+        />
+      )}
+      onEndReached={isPaginated ? handleLoadMore : undefined}
+      onEndReachedThreshold={0.5}
+      ListFooterComponent={isPaginated ? renderFooter : null}
+      keyboardShouldPersistTaps="handled" // taps on cards work even with the keyboard open
+      keyboardDismissMode="on-drag" // CONCEPT: start scrolling = hide the keyboard
+      contentContainerStyle={styles.list}
+    />
+  );
+
+  // CONCEPT: interface states — loading, error, empty, success
+  let content = null;
+  if (isSearchActive) {
+    if (indexLoading) {
+      content = <LoadingState message="Preparando búsqueda..." />;
+    } else if (indexError) {
+      content = <ErrorState message={indexError} onRetry={handleIndexRetry} />;
+    } else if (searchResults.length === 0) {
+      content = (
+        <EmptyState message={`No se encontró ningún Pokémon que empiece por "${searchTerm}".`} />
+      );
+    } else {
+      content = renderGrid(searchResults, false); // search results: no pagination
+    }
+  } else if (loading) {
     content = <LoadingState message="Cargando Pokémon..." />;
   } else if (error && pokemons.length === 0) {
     // Error on the first page: nothing to show yet
     content = <ErrorState message={error} onRetry={handleRetry} />;
   } else {
-    content = (
-      // CONCEPT: FlatList renders only what is on screen (better than ScrollView + map)
-      <FlatList
-        data={pokemons}
-        keyExtractor={(item) => String(item.id)}
-        numColumns={2}
-        renderItem={({ item }) => (
-          <PokemonCard pokemon={item} onPress={() => onSelectPokemon(item.id)} />
-        )}
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.5} // start loading when half a screen is left
-        ListFooterComponent={renderFooter}
-        contentContainerStyle={styles.list}
-      />
-    );
+    content = renderGrid(pokemons, true);
   }
 
   return (
-    <View style={styles.container}>
+    // CONCEPT: tapping any empty area of the screen hides the keyboard
+    <Pressable style={styles.container} onPress={Keyboard.dismiss} accessible={false}>
       <Text style={styles.title}>PokéDex Explorer</Text>
+
+      <SearchBar
+        value={searchText}
+        onChangeText={setSearchText}
+        onSearch={handleSearch}
+      />
+
+      {isSearchActive && (
+        <Pressable onPress={handleClearSearch}>
+          <Text style={styles.clear}>Ver todos los Pokémon</Text>
+        </Pressable>
+      )}
+
       {content}
-    </View>
+    </Pressable>
   );
 }
 
@@ -113,6 +201,12 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textAlign: 'center',
     paddingVertical: spacing.md,
+  },
+  clear: {
+    textAlign: 'center',
+    color: colors.primary,
+    fontWeight: 'bold',
+    paddingBottom: spacing.sm,
   },
   list: {
     paddingHorizontal: spacing.sm,

@@ -20,6 +20,7 @@ export default function PokemonCard({ pokemon, onPress }) {
 const styles = StyleSheet.create({
   card: {
     flex: 1, // each card takes half of the row
+    maxWidth: '50%', // a single card (search result) does not stretch to full width
     margin: spacing.xs,
     padding: spacing.md,
     alignItems: 'center',

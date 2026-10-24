@@ -1,10 +1,16 @@
-import { BASE_URL, PAGE_SIZE, ARTWORK_URL } from '../config/api';
+import { BASE_URL, PAGE_SIZE, ARTWORK_URL, INDEX_LIMIT } from '../config/api';
 
 // The list only gives "name" and "url". The id is the last number of the url:
 // ".../pokemon/25/" -> 25
 const getIdFromUrl = (url) => {
   const parts = url.split('/').filter(Boolean); // remove empty pieces
   return Number(parts[parts.length - 1]);
+};
+
+// CONCEPT: mapping — return only what the app uses
+const mapListItem = (item) => {
+  const id = getIdFromUrl(item.url);
+  return { id, name: item.name, image: `${ARTWORK_URL}/${id}.png` };
 };
 
 // CONCEPT: async function + AbortController signal — the screen can cancel the request
@@ -21,14 +27,23 @@ export const fetchPokemonList = async (offset, signal) => {
 
   const data = await response.json();
 
-  // CONCEPT: mapping — return only what the app uses
-  const results = data.results.map((item) => {
-    const id = getIdFromUrl(item.url);
-    return { id, name: item.name, image: `${ARTWORK_URL}/${id}.png` };
-  });
-
   // "next" is null when there are no more pages
-  return { results, hasMore: data.next !== null };
+  return { results: data.results.map(mapListItem), hasMore: data.next !== null };
+};
+
+// CONCEPT: one request for every name (only name + url, very light),
+// so the live search filters on the phone instead of calling the API on each letter
+export const fetchPokemonIndex = async (signal) => {
+  const url = `${BASE_URL}/pokemon?limit=${INDEX_LIMIT}`;
+
+  const response = await fetch(url, { signal });
+
+  if (!response.ok) {
+    throw new Error(`Error HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.results.map(mapListItem);
 };
 
 export const fetchPokemonDetail = async (query, signal) => {
