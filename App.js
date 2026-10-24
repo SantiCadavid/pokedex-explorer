@@ -1,21 +1,15 @@
 import { useEffect } from 'react';
 import { Text, View } from 'react-native';
-import { fetchPokemonList, fetchPokemonDetail } from './src/services/pokemonService';
+import { colors, typeColors } from './src/theme';
+import { formatId, capitalize, translateType, translateStat } from './src/utils/format';
 
 export default function App() {
   useEffect(() => {
-    const test = async () => {
-      const list = await fetchPokemonList(0);
-      console.log('LIST:', list.results[0], 'hasMore:', list.hasMore);
-      const detail = await fetchPokemonDetail('  Pikachu ');
-      console.log('DETAIL:', detail);
-      try {
-        await fetchPokemonDetail('noexiste');
-      } catch (e) {
-        console.log('404 test:', e.message, e.status);
-      }
-    };
-    test();
+    console.log('formatId:', formatId(25), formatId(1), formatId(1025));
+    console.log('capitalize:', capitalize('pikachu'));
+    console.log('types:', translateType('fire'), translateType('electric'), translateType('xyz'));
+    console.log('stats:', translateStat('hp'), translateStat('special-attack'));
+    console.log('colors:', colors.primary, typeColors.electric);
   }, []);
 
   return (
