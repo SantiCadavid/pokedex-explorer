@@ -1,20 +1,25 @@
-import { useEffect } from 'react';
-import { Text, View } from 'react-native';
-import { colors, typeColors } from './src/theme';
-import { formatId, capitalize, translateType, translateStat } from './src/utils/format';
+import { useState } from 'react';
+import { View, Pressable, Text } from 'react-native';
+import LoadingState from './src/components/LoadingState';
+import ErrorState from './src/components/ErrorState';
+import EmptyState from './src/components/EmptyState';
 
 export default function App() {
-  useEffect(() => {
-    console.log('formatId:', formatId(25), formatId(1), formatId(1025));
-    console.log('capitalize:', capitalize('pikachu'));
-    console.log('types:', translateType('fire'), translateType('electric'), translateType('xyz'));
-    console.log('stats:', translateStat('hp'), translateStat('special-attack'));
-    console.log('colors:', colors.primary, typeColors.electric);
-  }, []);
+  const [state, setState] = useState('loading');
 
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-      <Text>Mira la terminal</Text>
+    <View style={{ flex: 1, paddingTop: 60 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+        {['loading', 'error', 'empty'].map((name) => (
+          <Pressable key={name} onPress={() => setState(name)}>
+            <Text style={{ padding: 12, fontWeight: 'bold' }}>{name}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {state === 'loading' && <LoadingState message="Cargando Pokémon..." />}
+      {state === 'error' && <ErrorState onRetry={() => setState('loading')} />}
+      {state === 'empty' && <EmptyState message='No existe ningún Pokémon llamado "xyz".' />}
     </View>
   );
 }
