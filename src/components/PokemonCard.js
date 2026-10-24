@@ -25,8 +25,8 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     alignItems: 'center',
     backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
+    borderRadius: radius.lg,
+    borderWidth: 2,
     borderColor: colors.border,
   },
   pressed: {
@@ -38,12 +38,13 @@ const styles = StyleSheet.create({
   },
   number: {
     marginTop: spacing.sm,
-    color: colors.textMuted,
-    fontSize: 13,
+    color: colors.primaryDark,
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   name: {
     color: colors.text,
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

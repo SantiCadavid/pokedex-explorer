@@ -197,8 +197,7 @@ export default function ListScreen({ onSelectPokemon }) {
   return (
     // CONCEPT: tapping any empty area of the screen hides the keyboard
     <Pressable style={styles.container} onPress={Keyboard.dismiss} accessible={false}>
-      <Text style={styles.title}>PokéDex Explorer</Text>
-
+      {/* The "PokéDex Explorer" title lives in PokedexHeader (App.js) */}
       <SearchBar
         value={searchText}
         onChangeText={setSearchText}
@@ -230,14 +229,8 @@ export default function ListScreen({ onSelectPokemon }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: spacing.md, // space between the screen frame and the search bar
     backgroundColor: colors.background,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: colors.primary,
-    textAlign: 'center',
-    paddingVertical: spacing.md,
   },
   clear: {
     textAlign: 'center',

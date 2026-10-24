@@ -1,14 +1,29 @@
 // CONCEPT: centralized theme — colors, spacing and radius live in one place
 export const colors = {
-  primary: '#E3350D',
-  primaryDark: '#B02A0A',
-  background: '#F4F4F6',
-  card: '#FFFFFF',
-  border: '#E0E0E5',
-  text: '#222222',
-  textMuted: '#777777',
-  danger: '#C62828',
+  // Accent inside the screen (buttons, spinner, bars, links)
+  primary: '#1E8DB5',
+  primaryDark: '#14607C',
+
+  // Device body (Pokédex from the series)
+  body: '#DC0A2D',
+  bodyDark: '#8B0A1E',
+  frame: '#1A1A1A',
+
+  // Screen (inspired by a light aqua style)
+  background: '#A9E4EE',
+  card: 'rgba(255, 255, 255, 0.45)', // translucent white
+  border: 'rgba(255, 255, 255, 0.8)',
+  text: '#0F3D4C',
+  textMuted: '#2F6E82',
+  danger: '#B00020',
   white: '#FFFFFF',
+
+  // Header details
+  lens: '#30A7D7',
+  lensShine: '#BDEBFA',
+  lightRed: '#FF1C1C',
+  lightYellow: '#FFDE00',
+  lightGreen: '#4DAD5B',
 };
 
 export const spacing = {
@@ -22,6 +37,7 @@ export const spacing = {
 export const radius = {
   sm: 6,
   md: 12,
+  lg: 18,
   pill: 999,
 };
 

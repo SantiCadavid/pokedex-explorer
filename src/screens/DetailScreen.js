@@ -7,7 +7,7 @@ import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
 import EmptyState from '../components/EmptyState';
 import { colors, spacing, radius } from '../theme';
-import { formatId, capitalize, translateStat } from '../utils/format';
+import { formatId, translateStat } from '../utils/format';
 
 const MAX_STAT = 255; // highest possible base stat
 
@@ -68,7 +68,7 @@ export default function DetailScreen({ pokemonId, onBack }) {
         {/* CONCEPT: a remote Image needs explicit width and height */}
         <Image source={{ uri: pokemon.image }} style={styles.image} />
         <Text style={styles.number}>{formatId(pokemon.id)}</Text>
-        <Text style={styles.name}>{capitalize(pokemon.name)}</Text>
+        <Text style={styles.name}>{pokemon.name}</Text>
 
         <View style={styles.types}>
           {pokemon.types.map((type) => (
@@ -78,24 +78,26 @@ export default function DetailScreen({ pokemonId, onBack }) {
 
         <View style={styles.measures}>
           <View style={styles.measureBox}>
+            <Text style={styles.measureLabel}>ALTURA</Text>
             <Text style={styles.measureValue}>{formatMeasure(pokemon.height, 'm')}</Text>
-            <Text style={styles.measureLabel}>Altura</Text>
           </View>
           <View style={styles.measureBox}>
+            <Text style={styles.measureLabel}>PESO</Text>
             <Text style={styles.measureValue}>{formatMeasure(pokemon.weight, 'kg')}</Text>
-            <Text style={styles.measureLabel}>Peso</Text>
           </View>
         </View>
 
-        <Text style={styles.section}>Estadísticas base</Text>
-        {pokemon.stats.map((stat) => (
-          <StatBar
-            key={stat.name}
-            label={translateStat(stat.name)}
-            value={stat.value}
-            max={MAX_STAT}
-          />
-        ))}
+        <View style={styles.statsBox}>
+          <Text style={styles.section}>ESTADÍSTICAS BASE</Text>
+          {pokemon.stats.map((stat) => (
+            <StatBar
+              key={stat.name}
+              label={translateStat(stat.name)}
+              value={stat.value}
+              max={MAX_STAT}
+            />
+          ))}
+        </View>
       </ScrollView>
     );
   }
@@ -103,7 +105,10 @@ export default function DetailScreen({ pokemonId, onBack }) {
   return (
     <View style={styles.container}>
       {/* Always visible, even while loading or after an error */}
-      <Pressable style={styles.backButton} onPress={onBack}>
+      <Pressable
+        style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+        onPress={onBack}
+      >
         <Text style={styles.backText}>← Volver a la lista</Text>
       </Pressable>
       {content}
@@ -122,15 +127,18 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
   },
   backText: {
     color: colors.white,
     fontWeight: 'bold',
   },
+  pressed: {
+    opacity: 0.7,
+  },
   content: {
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingBottom: spacing.xl,
   },
   image: {
@@ -139,13 +147,16 @@ const styles = StyleSheet.create({
   },
   number: {
     marginTop: spacing.sm,
-    color: colors.textMuted,
-    fontSize: 16,
+    color: colors.primaryDark,
+    fontSize: 20,
+    fontWeight: 'bold',
   },
   name: {
     color: colors.text,
     fontSize: 28,
-    fontWeight: 'bold',
+    fontWeight: '900',
+    letterSpacing: 1,
+    textTransform: 'uppercase', // "pikachu" -> "PIKACHU"
     marginBottom: spacing.sm,
   },
   types: {
@@ -155,31 +166,42 @@ const styles = StyleSheet.create({
   measures: {
     flexDirection: 'row',
     gap: spacing.md,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   measureBox: {
     alignItems: 'center',
+    minWidth: 120,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
     backgroundColor: colors.card,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: colors.border,
-    borderRadius: radius.md,
-  },
-  measureValue: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: 'bold',
+    borderRadius: radius.lg,
   },
   measureLabel: {
     color: colors.textMuted,
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+  },
+  measureValue: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  statsBox: {
+    alignSelf: 'stretch',
+    padding: spacing.md,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
   },
   section: {
-    alignSelf: 'stretch',
     color: colors.primaryDark,
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: 'bold',
-    marginBottom: spacing.sm,
+    letterSpacing: 1,
+    marginBottom: spacing.md,
   },
 });
