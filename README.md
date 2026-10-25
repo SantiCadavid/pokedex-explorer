@@ -33,7 +33,7 @@ Escanear el código QR con **Expo Go (SDK 57)**.
 - Encabezado "PokéDex Explorer" con diseño de Pokédex.
 - Cuadrícula de 2 columnas con imagen, número (`#025`) y nombre.
 - Carga inicial de 20 Pokémon y 20 más al llegar al final (scroll infinito), con indicador de carga.
-- Búsqueda por nombre o número que ignora mayúsculas y espacios. *(Adicional: búsqueda en vivo con coincidencias parciales mientras se escribe.)*
+- Búsqueda por nombre o número que ignora mayúsculas y espacios. *(Adicional: búsqueda en vivo con coincidencias parciales mientras se escribe; también acepta el número con `#`, por ejemplo `#25`.)*
 - Botón flotante para volver al inicio de la lista. *(Adicional)*
 - La lista conserva sus datos, la búsqueda y la posición al volver de una ficha. *(Adicional)*
 
@@ -64,14 +64,14 @@ pokedex-explorer/
     ├── config/
     │   └── api.js                 Constantes: URL base, tamaño de página, URL de imágenes, límites
     ├── services/
-    │   └── pokemonService.js      Peticiones a la PokéAPI y mapeo de respuestas (sin JSX ni estilos)
+    │   └── pokemonService.js      Peticiones a la PokéAPI, tiempo límite, validación y mapeo (sin JSX ni estilos)
     ├── screens/
     │   ├── ListScreen.js          Estado y useEffect de la lista, paginación, búsqueda y estados
     │   └── DetailScreen.js        Estado y useEffect de la ficha, gestos de deslizamiento y estados
     ├── components/
     │   ├── PokedexHeader.js       Encabezado con lente, luces y título
     │   ├── SearchBar.js           Campo de búsqueda y botón "Buscar"
-    │   ├── PokemonCard.js         Tarjeta de la cuadrícula
+    │   ├── PokemonCard.js         Tarjeta de la cuadrícula (con imagen de respaldo)
     │   ├── TypeBadge.js           Distintivo de color por tipo
     │   ├── StatBar.js             Barra proporcional de una estadística
     │   ├── LoadingState.js        Indicador de carga con texto
@@ -80,17 +80,19 @@ pokedex-explorer/
     ├── theme/
     │   └── index.js               Colores, espaciados, radios y colores por tipo
     └── utils/
-        ├── format.js              Formato de número, mayúscula inicial y traducciones al español
-        └── search.js              Regla de coincidencia de la búsqueda (nombre o número por prefijo)
+        ├── format.js              Formato de número, medidas, mayúscula inicial y traducciones (seguro ante datos faltantes)
+        ├── search.js              Regla de coincidencia de la búsqueda (nombre o número por prefijo)
+        └── errors.js              Traduce cada tipo de error a un mensaje claro en español
 ```
 
 ### Por qué se organizó así
 
 - **La red vive solo en `services`.** Las pantallas llaman funciones como `fetchPokemonList(offset, signal)` y reciben datos limpios. Si la API cambia, solo se modifica ese archivo. Así se cumple la regla de no mezclar las llamadas a la API con el JSX y los estilos.
 - **`config` separa las constantes de la lógica**, siguiendo el patrón visto en clase con `BASE_URL`.
-- **Las pantallas (`screens`) manejan el estado y los efectos**, como en el ejemplo que vimos en clase: cada una tiene su `useEffect` con `AbortController`.
+- **Las pantallas (`screens`) manejan el estado y los efectos**, como en el ejemplo de la docente: cada una tiene su `useEffect` con `AbortController`.
 - **Los componentes solo reciben props.** No conocen la API, así que se reutilizan; por ejemplo, `ErrorState` sirve para la lista, la búsqueda y la ficha.
 - **`theme` centraliza el diseño.** Ningún componente escribe colores a mano, y cambiar la paleta es editar un solo archivo.
+- **`utils` agrupa funciones puras** (formato, búsqueda y mensajes de error) que no dependen de la API ni de la interfaz.
 - **Navegación por estado, sin librerías.** La guía pide una pantalla con dos vistas. `App.js` guarda `selectedPokemon`: si es `null` muestra la lista y, si tiene un id, la ficha. La lista se oculta en lugar de desmontarse, para conservar sus datos y su posición.
 
 ## Decisiones técnicas
@@ -101,6 +103,7 @@ pokedex-explorer/
 | `onEndReached` se dispara varias veces seguidas | Se bloquea mientras carga, tras un error, durante una búsqueda o cuando `next` es `null`. La página siguiente se pide con `pokemons.length`, así dos llamadas seguidas piden la misma página en lugar de saltarse una. |
 | Un nombre inexistente responde 404 con texto, no JSON | Se revisa `response.ok` **antes** de `response.json()` y se guarda `error.status` para distinguir "no existe" de un error de conexión. |
 | Peticiones que quedan pendientes al cambiar de vista | Cada `useEffect` crea un `AbortController` y lo cancela en la limpieza. Un `AbortError` no se muestra como error. |
+| `fetch` no tiene tiempo límite propio | Todas las peticiones pasan por `requestJson`, que las cancela a los 10 segundos y muestra un mensaje en lugar de "Cargando..." para siempre. |
 | La petición no debe repetirse sin parar | Cada `useEffect` declara sus dependencias: `[offset, reloadKey]` en la lista, `[indexKey]` en el índice y `[pokemonId, reloadKey]` en la ficha. "Reintentar" cambia la clave para repetir la petición. |
 
 ## Decisiones propias y su relación con los requisitos
@@ -116,8 +119,9 @@ Además de lo que pide la guía, se tomaron estas decisiones por cuenta propia. 
 | **El 404 se maneja en la ficha** | Revisar `response.ok` antes de `response.json()`; mensaje cuando el nombre no existe | Con la búsqueda en vivo, "sin resultados" sale del filtro local. El manejo del 404 se mantiene en `fetchPokemonDetail` y la ficha lo muestra como "Este Pokémon no existe". |
 | **Navegación por estado sin librerías** (`selectedPokemon` en `App.js`) | Una pantalla principal con dos vistas: lista y ficha | Se respeta la estructura de una pantalla con dos vistas, sin instalar React Navigation. |
 | **La lista se oculta, no se desmonta**, al abrir una ficha | Tocar una tarjeta abre la ficha; botón "Volver a la lista" | Al volver, la lista conserva las páginas cargadas, la búsqueda y la posición del scroll, sin pedir los datos otra vez. |
-| **Estado y `useEffect` dentro de las pantallas**, sin hooks personalizados | Arquitectura propia que separe la red de la interfaz | Sigue el patrón del ejemplo que vimos en clase. La separación se logra con `services` (red) y `components` (solo props). |
+| **Estado y `useEffect` dentro de las pantallas**, sin hooks personalizados | Arquitectura propia que separe la red de la interfaz | Sigue el patrón del ejemplo de la docente. La separación se logra con `services` (red) y `components` (solo props). |
 | **`AbortController` en todos los `useEffect`** | Manejar respuesta, error y carga; patrón visto en clase con `signal` | Si el usuario cambia de vista o desliza rápido entre Pokémon, la petición anterior se cancela. La cancelación no se muestra como error. |
+| **Tiempo límite y mensajes según la causa del error** | Estado de error con mensaje claro en español | El usuario distingue entre falta de internet, una API lenta, un error del servidor o datos incompletos. |
 | **"Reintentar" con una clave en las dependencias** (`reloadKey`, `indexKey`) | Estado de error con botón "Reintentar" | Cambiar la clave vuelve a ejecutar solo el `useEffect` que falló. |
 | **Error en páginas posteriores sin perder la lista** | Estado de error en toda petición | Si falla la primera página, el error ocupa la pantalla. Si falla una página posterior, lo ya cargado se mantiene y el error aparece al final de la lista. |
 | **Botón flotante ↑ para volver al inicio** | Scroll infinito | Complementa el scroll infinito: con cientos de Pokémon cargados, permite regresar arriba con un toque. |
@@ -141,6 +145,7 @@ Además de lo que pide la guía, se tomaron estas decisiones por cuenta propia. 
 | **Un commit por paso** en la rama `main` | Entrega del repositorio público | El historial muestra el avance del proyecto paso a paso. |
 | **Comentarios `// CONCEPT:`** con formato fijo | Marcar con un comentario cada concepto visto | Facilita encontrar cada concepto en el código durante la sustentación. |
 | **Versiones fijadas en SDK 57**, sin `npm audit fix --force` | Compatibilidad con Expo Go | Se evitó cambiar versiones de paquetes que podían romper la compatibilidad. |
+| **Pruebas de robustez** quitando datos a propósito | Estados de la interfaz en toda petición | Se comprobó que la app muestra mensajes claros en lugar de cerrarse o mostrar datos falsos. |
 
 ### Alternativas evaluadas y descartadas
 
@@ -154,13 +159,32 @@ Además de lo que pide la guía, se tomaron estas decisiones por cuenta propia. 
 | Fuente pixelada estilo Game Boy | No combinaba con el estilo final y requería instalar dos paquetes. |
 | Lista horizontal con páginas para la ficha (`pagingEnabled`) | Obligaba a pedir varias fichas a la vez y complicaba los estados de carga y error. |
 
+## Robustez ante datos faltantes y errores
+
+La app nunca debe cerrarse ni mostrar datos falsos si la API falla o responde incompleta. Se aplicó defensa en dos capas:
+
+- **Servicio (`pokemonService.js`):** valida cada campo. Lo que falta se convierte en `null` o `[]`, nunca en `undefined`. Los elementos sin id se descartan. Si la respuesta es inservible, se lanza un error con su tipo (`http`, `timeout`, `data`).
+- **Interfaz:** los componentes no confían en el estado. Antes de recorrer o formatear un dato revisan que exista, y si no, muestran un texto claro.
+
+| Situación | Lo que ve el usuario |
+|---|---|
+| Sin internet | "No se pudo conectar... Revisa tu internet." con "Reintentar" |
+| La API no responde en 10 s | "La API tardó demasiado en responder..." con "Reintentar" |
+| Error del servidor (404, 500...) | "El servidor respondió con un error (código)..." |
+| Respuesta que no es JSON o viene incompleta | "La API respondió con datos incompletos..." |
+| Lista vacía | "No hay Pokémon para mostrar." |
+| Sin nombre | "Desconocido" |
+| Sin imagen o imagen rota | "?" en la tarjeta y "Sin imagen" en la ficha |
+| Sin tipos o sin estadísticas | "Sin tipos registrados" / "Sin estadísticas disponibles" |
+| Sin altura o peso | "Sin dato" |
+
 ## Estados de la interfaz
 
 | Estado | Lista | Búsqueda | Ficha |
 |---|---|---|---|
 | Cargando | "Cargando Pokémon..." y "Cargando más Pokémon..." al final | "Preparando búsqueda..." | "Cargando ficha..." |
-| Error | Mensaje y "Reintentar" | Mensaje y "Reintentar" | Mensaje y "Reintentar" |
-| Sin resultados | — | "No se encontró ningún Pokémon que empiece por..." | "Este Pokémon no existe." (404) |
+| Error | Mensaje según la causa y "Reintentar" | Mensaje según la causa y "Reintentar" | Mensaje según la causa y "Reintentar" |
+| Sin resultados | "No hay Pokémon para mostrar." | "No se encontró ningún Pokémon que empiece por..." | "Este Pokémon no existe." (404) |
 | Éxito | Cuadrícula | Cuadrícula de coincidencias | Ficha completa |
 
 ## Evidencias
