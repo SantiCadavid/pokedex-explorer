@@ -1,6 +1,17 @@
-import { useState, useEffect } from 'react';
-import { View, Text, Image, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  Image,
+  ScrollView,
+  Pressable,
+  Animated,
+  PanResponder,
+  useWindowDimensions,
+  StyleSheet,
+} from 'react-native';
 import { fetchPokemonDetail } from '../services/pokemonService';
+import { LAST_POKEMON_ID } from '../config/api';
 import TypeBadge from '../components/TypeBadge';
 import StatBar from '../components/StatBar';
 import LoadingState from '../components/LoadingState';
@@ -10,18 +21,28 @@ import { colors, spacing, radius } from '../theme';
 import { formatId, translateStat } from '../utils/format';
 
 const MAX_STAT = 255; // highest possible base stat
+const SWIPE_THRESHOLD = 80; // pixels the finger must travel to change Pokémon
 
 // 0.4 -> "0,4 m"   6 -> "6,0 kg"
 const formatMeasure = (value, unit) => `${value.toFixed(1).replace('.', ',')} ${unit}`;
 
-export default function DetailScreen({ pokemonId, onBack }) {
+export default function DetailScreen({ pokemonId, onBack, onChangePokemon }) {
   const [pokemon, setPokemon] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [reloadKey, setReloadKey] = useState(0); // "Reintentar"
 
-  // CONCEPT: useEffect dependency array — request again only if the id or reloadKey change
+  const { width } = useWindowDimensions();
+  // CONCEPT: Animated.Value — moves the card with the finger without re-rendering the screen
+  const translateX = useRef(new Animated.Value(0)).current;
+
+  // Only national numbers (1..LAST_POKEMON_ID) have a previous / next
+  const canNavigate = pokemonId >= 1 && pokemonId <= LAST_POKEMON_ID;
+  const hasPrevious = canNavigate && pokemonId > 1;
+  const hasNext = canNavigate && pokemonId < LAST_POKEMON_ID;
+
+  // CONCEPT: useEffect dependency array — changing pokemonId (swipe or arrows) loads the new one
   useEffect(() => {
     const controller = new AbortController();
 
@@ -47,11 +68,52 @@ export default function DetailScreen({ pokemonId, onBack }) {
     };
 
     loadDetail();
-    // CONCEPT: cleanup — leaving the detail cancels the pending request
+    // CONCEPT: cleanup — swiping fast cancels the previous request
     return () => controller.abort();
   }, [pokemonId, reloadKey]);
 
   const handleRetry = () => setReloadKey((prev) => prev + 1);
+
+  // direction: +1 = next, -1 = previous
+  const goTo = (direction) => {
+    const allowed = direction === 1 ? hasNext : hasPrevious;
+    if (!allowed) return;
+    // Slide the card out to the side, then show the new Pokémon in the center
+    Animated.timing(translateX, {
+      toValue: -direction * width,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => {
+      translateX.setValue(0);
+      onChangePokemon(pokemonId + direction);
+    });
+  };
+
+  // The swipe was too short: go back to the center with a small bounce
+  const resetPosition = () => {
+    Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+  };
+
+  // CONCEPT: PanResponder — reads the finger movement to detect a horizontal swipe
+  const panResponder = PanResponder.create({
+    // Take the gesture only if it is clearly horizontal, so vertical moves keep scrolling
+    onMoveShouldSetPanResponderCapture: (_, gesture) =>
+      canNavigate &&
+      Math.abs(gesture.dx) > 15 &&
+      Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5,
+    onPanResponderTerminationRequest: () => false, // the ScrollView cannot steal the swipe
+    onPanResponderMove: (_, gesture) => {
+      // Resistance at the edges: #001 has no previous, the last one has no next
+      const blocked = (gesture.dx > 0 && !hasPrevious) || (gesture.dx < 0 && !hasNext);
+      translateX.setValue(blocked ? gesture.dx * 0.25 : gesture.dx);
+    },
+    onPanResponderRelease: (_, gesture) => {
+      if (gesture.dx < -SWIPE_THRESHOLD && hasNext) goTo(1); // swipe left -> next
+      else if (gesture.dx > SWIPE_THRESHOLD && hasPrevious) goTo(-1); // swipe right -> previous
+      else resetPosition();
+    },
+    onPanResponderTerminate: resetPosition,
+  });
 
   // CONCEPT: interface states — loading, error, empty, success
   let content;
@@ -111,7 +173,43 @@ export default function DetailScreen({ pokemonId, onBack }) {
       >
         <Text style={styles.backText}>← Volver a la lista</Text>
       </Pressable>
-      {content}
+
+      {/* Hint + arrows: the swipe can also be done by tapping */}
+      {canNavigate && (
+        <View style={styles.navRow}>
+          <Pressable
+            style={[styles.navButton, !hasPrevious && styles.navDisabled]}
+            onPress={() => goTo(-1)}
+            disabled={!hasPrevious}
+            accessibilityLabel="Pokémon anterior"
+          >
+            <Text style={styles.navText}>
+              {hasPrevious ? `‹ ${formatId(pokemonId - 1)}` : '‹'}
+            </Text>
+          </Pressable>
+
+          <Text style={styles.hint}>Desliza para cambiar</Text>
+
+          <Pressable
+            style={[styles.navButton, !hasNext && styles.navDisabled]}
+            onPress={() => goTo(1)}
+            disabled={!hasNext}
+            accessibilityLabel="Pokémon siguiente"
+          >
+            <Text style={styles.navText}>
+              {hasNext ? `${formatId(pokemonId + 1)} ›` : '›'}
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* The card moves with the finger */}
+      <Animated.View
+        style={[styles.fill, { transform: [{ translateX }] }]}
+        {...panResponder.panHandlers}
+      >
+        {content}
+      </Animated.View>
     </View>
   );
 }
@@ -121,9 +219,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  fill: {
+    flex: 1,
+  },
   backButton: {
     alignSelf: 'flex-start',
     margin: spacing.md,
+    marginBottom: spacing.sm,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     backgroundColor: colors.primary,
@@ -135,6 +237,34 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.7,
+  },
+  navRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  navButton: {
+    minWidth: 84,
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+  },
+  navDisabled: {
+    opacity: 0.3,
+  },
+  navText: {
+    color: colors.primaryDark,
+    fontWeight: 'bold',
+  },
+  hint: {
+    color: colors.textMuted,
+    fontSize: 12,
   },
   content: {
     alignItems: 'center',

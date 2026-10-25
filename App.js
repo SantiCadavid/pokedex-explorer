@@ -31,6 +31,8 @@ export default function App() {
             <DetailScreen
               pokemonId={selectedPokemon}
               onBack={() => setSelectedPokemon(null)}
+              // Changing the id (previous/next) makes the detail load the new Pokémon
+              onChangePokemon={setSelectedPokemon}
             />
           )}
         </View>
