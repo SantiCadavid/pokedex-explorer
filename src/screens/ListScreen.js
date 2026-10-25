@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Text, FlatList, Pressable, Keyboard, StyleSheet } from 'react-native';
 import { fetchPokemonList, fetchPokemonIndex } from '../services/pokemonService';
 import { matchesSearch } from '../utils/search';
+import { getErrorMessage } from '../utils/errors';
 import PokemonCard from '../components/PokemonCard';
 import SearchBar from '../components/SearchBar';
 import LoadingState from '../components/LoadingState';
@@ -55,7 +56,8 @@ export default function ListScreen({ onSelectPokemon }) {
       } catch (err) {
         // CONCEPT: a cancelled request (AbortError) is not a real error
         if (err.name !== 'AbortError') {
-          setError('No se pudo cargar la lista de Pokémon. Revisa tu internet.');
+          // The message depends on the real cause: no internet, timeout, HTTP error or bad data
+          setError(getErrorMessage(err, 'la lista de Pokémon'));
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -82,7 +84,7 @@ export default function ListScreen({ onSelectPokemon }) {
         setAllPokemons(result);
       } catch (err) {
         if (err.name !== 'AbortError') {
-          setIndexError('No se pudo preparar la búsqueda. Revisa tu internet.');
+          setIndexError(getErrorMessage(err, 'el buscador'));
         }
       } finally {
         if (!controller.signal.aborted) setIndexLoading(false);
@@ -93,8 +95,8 @@ export default function ListScreen({ onSelectPokemon }) {
     return () => controller.abort();
   }, [indexKey]);
 
-  // Ignore uppercase and spaces at the start or end
-  const searchTerm = searchText.trim().toLowerCase();
+  // Ignore uppercase, spaces at the ends and a leading "#" (users may type "#25")
+  const searchTerm = searchText.trim().toLowerCase().replace(/^#/, '');
   const isSearchActive = searchTerm !== '';
 
   // CONCEPT: derived data — results are calculated on every keystroke from searchText,
@@ -137,7 +139,10 @@ export default function ListScreen({ onSelectPokemon }) {
   const renderFooter = () => {
     if (loadingMore) return <LoadingState message="Cargando más Pokémon..." />;
     if (error) return <ErrorState message={error} onRetry={handleRetry} />;
-    if (!hasMore) return <Text style={styles.endText}>No hay más Pokémon.</Text>;
+    // Only when there was something to show (an empty list uses ListEmptyComponent)
+    if (!hasMore && pokemons.length > 0) {
+      return <Text style={styles.endText}>No hay más Pokémon.</Text>;
+    }
     return null;
   };
 
@@ -157,6 +162,8 @@ export default function ListScreen({ onSelectPokemon }) {
           }}
         />
       )}
+      // CONCEPT: empty state — the request worked but there is nothing to show
+      ListEmptyComponent={<EmptyState message="No hay Pokémon para mostrar." />}
       onEndReached={isPaginated ? handleLoadMore : undefined}
       onEndReachedThreshold={0.5}
       ListFooterComponent={isPaginated ? renderFooter : null}
@@ -191,7 +198,7 @@ export default function ListScreen({ onSelectPokemon }) {
     content = <ErrorState message={error} onRetry={handleRetry} />;
   } else {
     content = renderGrid(pokemons, true);
-    hasGrid = true;
+    hasGrid = pokemons.length > 0;
   }
 
   return (
@@ -239,6 +246,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   list: {
+    flexGrow: 1, // lets the empty state be centered when there are no items
     paddingHorizontal: spacing.sm,
     paddingBottom: spacing.lg,
   },

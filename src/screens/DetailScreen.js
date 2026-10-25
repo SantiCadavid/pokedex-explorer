@@ -12,25 +12,24 @@ import {
 } from 'react-native';
 import { fetchPokemonDetail } from '../services/pokemonService';
 import { LAST_POKEMON_ID } from '../config/api';
+import { getErrorMessage } from '../utils/errors';
 import TypeBadge from '../components/TypeBadge';
 import StatBar from '../components/StatBar';
 import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
 import EmptyState from '../components/EmptyState';
 import { colors, spacing, radius } from '../theme';
-import { formatId, translateStat } from '../utils/format';
+import { formatId, formatMeasure, translateStat } from '../utils/format';
 
 const MAX_STAT = 255; // highest possible base stat
 const SWIPE_THRESHOLD = 80; // pixels the finger must travel to change Pokémon
-
-// 0.4 -> "0,4 m"   6 -> "6,0 kg"
-const formatMeasure = (value, unit) => `${value.toFixed(1).replace('.', ',')} ${unit}`;
 
 export default function DetailScreen({ pokemonId, onBack, onChangePokemon }) {
   const [pokemon, setPokemon] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notFound, setNotFound] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0); // "Reintentar"
 
   const { width } = useWindowDimensions();
@@ -38,7 +37,8 @@ export default function DetailScreen({ pokemonId, onBack, onChangePokemon }) {
   const translateX = useRef(new Animated.Value(0)).current;
 
   // Only national numbers (1..LAST_POKEMON_ID) have a previous / next
-  const canNavigate = pokemonId >= 1 && pokemonId <= LAST_POKEMON_ID;
+  const canNavigate =
+    Number.isInteger(pokemonId) && pokemonId >= 1 && pokemonId <= LAST_POKEMON_ID;
   const hasPrevious = canNavigate && pokemonId > 1;
   const hasNext = canNavigate && pokemonId < LAST_POKEMON_ID;
 
@@ -50,6 +50,7 @@ export default function DetailScreen({ pokemonId, onBack, onChangePokemon }) {
       setLoading(true);
       setError(null);
       setNotFound(false);
+      setImageFailed(false);
       try {
         const result = await fetchPokemonDetail(pokemonId, controller.signal);
         setPokemon(result);
@@ -60,7 +61,7 @@ export default function DetailScreen({ pokemonId, onBack, onChangePokemon }) {
         if (err.status === 404) {
           setNotFound(true);
         } else {
-          setError('No se pudo cargar la ficha del Pokémon. Revisa tu internet.');
+          setError(getErrorMessage(err, 'la ficha del Pokémon'));
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -124,18 +125,36 @@ export default function DetailScreen({ pokemonId, onBack, onChangePokemon }) {
   } else if (notFound || !pokemon) {
     content = <EmptyState message="Este Pokémon no existe." />;
   } else {
+    // The UI does not trust the state either: missing arrays become empty arrays
+    const types = Array.isArray(pokemon.types) ? pokemon.types : [];
+    const stats = Array.isArray(pokemon.stats) ? pokemon.stats : [];
+    const showImage = Boolean(pokemon.image) && !imageFailed;
+
     content = (
       // A ScrollView is fine here: it is one fixed card, not a long list
       <ScrollView contentContainerStyle={styles.content}>
-        {/* CONCEPT: a remote Image needs explicit width and height */}
-        <Image source={{ uri: pokemon.image }} style={styles.image} />
+        {showImage ? (
+          // CONCEPT: a remote Image needs explicit width and height
+          <Image
+            source={{ uri: pokemon.image }}
+            style={styles.image}
+            onError={() => setImageFailed(true)}
+          />
+        ) : (
+          <View style={[styles.image, styles.imagePlaceholder]}>
+            <Text style={styles.placeholderText}>Sin imagen</Text>
+          </View>
+        )}
+
         <Text style={styles.number}>{formatId(pokemon.id)}</Text>
-        <Text style={styles.name}>{pokemon.name}</Text>
+        <Text style={styles.name}>{pokemon.name || 'Desconocido'}</Text>
 
         <View style={styles.types}>
-          {pokemon.types.map((type) => (
-            <TypeBadge key={type} type={type} />
-          ))}
+          {types.length > 0 ? (
+            types.map((type) => <TypeBadge key={type} type={type} />)
+          ) : (
+            <Text style={styles.emptyText}>Sin tipos registrados</Text>
+          )}
         </View>
 
         <View style={styles.measures}>
@@ -151,14 +170,18 @@ export default function DetailScreen({ pokemonId, onBack, onChangePokemon }) {
 
         <View style={styles.statsBox}>
           <Text style={styles.section}>ESTADÍSTICAS BASE</Text>
-          {pokemon.stats.map((stat) => (
-            <StatBar
-              key={stat.name}
-              label={translateStat(stat.name)}
-              value={stat.value}
-              max={MAX_STAT}
-            />
-          ))}
+          {stats.length > 0 ? (
+            stats.map((stat) => (
+              <StatBar
+                key={stat.name}
+                label={translateStat(stat.name)}
+                value={stat.value}
+                max={MAX_STAT}
+              />
+            ))
+          ) : (
+            <Text style={styles.emptyText}>Sin estadísticas disponibles</Text>
+          )}
         </View>
       </ScrollView>
     );
@@ -275,6 +298,18 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
   },
+  imagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+  },
+  placeholderText: {
+    color: colors.textMuted,
+    fontWeight: 'bold',
+  },
   number: {
     marginTop: spacing.sm,
     color: colors.primaryDark,
@@ -292,6 +327,10 @@ const styles = StyleSheet.create({
   types: {
     flexDirection: 'row',
     marginBottom: spacing.md,
+  },
+  emptyText: {
+    color: colors.textMuted,
+    fontStyle: 'italic',
   },
   measures: {
     flexDirection: 'row',

@@ -1,9 +1,18 @@
-// 25 -> "#025"
-export const formatId = (id) => `#${String(id).padStart(3, '0')}`;
+const NO_DATA = 'Sin dato';
 
-// "pikachu" -> "Pikachu"
-export const capitalize = (text) =>
-  text.charAt(0).toUpperCase() + text.slice(1);
+// 25 -> "#025". Without a valid number -> "#???" (never "#undefined")
+export const formatId = (id) =>
+  Number.isInteger(id) && id > 0 ? `#${String(id).padStart(3, '0')}` : '#???';
+
+// "pikachu" -> "Pikachu". Without a valid text -> "Desconocido" (never crashes)
+export const capitalize = (text) => {
+  if (typeof text !== 'string' || text.trim() === '') return 'Desconocido';
+  return text.charAt(0).toUpperCase() + text.slice(1);
+};
+
+// 0.4 -> "0,4 m". Without a valid number -> "Sin dato" (never "NaN m")
+export const formatMeasure = (value, unit) =>
+  Number.isFinite(value) ? `${value.toFixed(1).replace('.', ',')} ${unit}` : NO_DATA;
 
 // The API gives English names; the interface must be in Spanish
 export const typeNames = {
@@ -36,6 +45,6 @@ export const statNames = {
   speed: 'Velocidad',
 };
 
-// If a name is missing from the dictionaries, show the original text
+// If a name is missing from the dictionaries, show the original text (or "Desconocido")
 export const translateType = (name) => typeNames[name] || capitalize(name);
 export const translateStat = (name) => statNames[name] || capitalize(name);
